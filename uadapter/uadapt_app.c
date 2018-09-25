@@ -59,15 +59,13 @@ int read_unix_uadapter(unix_uadapter_daemon_sockfd)
 
 int read_unix_controlmq(unix_controlmq_sockfd)
 {
-    // Gets whole Ethernet frame to pass on through the ControlMQ network
-
     // We will only read Ethernet frames.  Anything larger will be discarded.
     char buf[ETH_BUF_SIZ]; // single Ethernet frame
     bzero(buf, ETH_BUF_SIZ);
     int numbytes = 0;
     int numtotal = 0;
 
-    numbytes = read(unix_uadapter_daemon_sockfd, buf, ETH_BUF_SIZ);
+    numbytes = read(unix_controlmq_sockfd, buf, ETH_BUF_SIZ);
     if(numbytes == -1)
     {
 	return -1;
