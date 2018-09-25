@@ -8,16 +8,30 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
 #include <netinet/ether.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+
 
 // stub network (wire to device) socket file descriptor
 int stub_sockfd;
 
-// UNIX socket for local application interaction
+// UNIX socket to listen for local application connection
 int unix_sockfd;
+
+// UNIX socket connection to local application
+int unix_conn_sockfd = -1;
+
+// stub network interface name
+char stub_if_name[IFNAMSIZ];
+
+// Ethernet frame size
+#define ETH_BUF_SIZ	1514
+
 
 
 // Simple checksum function, may use others such as Cyclic Redundancy Check, CRC
@@ -40,19 +54,70 @@ int int_max(int x, int y)
 }
 
 
+int read_stub_net(int stub_sockfd)
+{
+    char buf[ETH_BUF_SIZ]; // single Ethernet frame
+    bzero(buf, ETH_BUF_SIZ);
+    int numbytes = 0;
+
+    numbytes = recvfrom(stub_sockfd, buf, ETH_BUF_SIZ, 0, NULL, NULL);
+
+
+    // Ethernet frame
+    //struct ether_header *eh = (struct ether_header *) buf;
+
+
+    // IP packet
+    //int ip_length = 0; // packet length
+    //struct iphdr *iph = (struct iphdr *) (buf + sizeof(struct ether_header));
+
+    //ip_length = ntohs(iph->ip_len);
+    
+
+    // ICMP payload
+    //struct icmphdr *icmp = (struct icmphdr *)(iph + 1);
+    
+
+    return 0;
+}
+
+
 int uadapt_daemon()
 {
+    // Grab packets off the stub wire, and put them on the stub wire.
     // Instantiate RAW socket to listen on wire
-    if ((stub_sockfd = socket(AF_INET, SOCK_RAW, htons(ETH_P_ALL))) == -1) //  or IPPROTO_RAW
+    if ((stub_sockfd = socket(AF_INET, SOCK_RAW, htons(ETH_P_ALL))) == -1)
     {
 	// log this 
 	return -1;;
     }
 
-    // Don't need to bind, listen, connect, or accept.
-    // Just grab packets off wire, and put them on the wire.
+    // Check these options with broker code!!!!
     // Set non-blocking????
-    
+    // Set interface to promiscuous mode - do we need to do this every time?
+    struct ifreq ifopts;  /* set promiscuous mode */
+    //struct ifreq if_ip;   /* get ip addr */
+    int sockopt = 1;
+    strncpy(ifopts.ifr_name, stub_if_name, IFNAMSIZ-1);
+    ioctl(stub_sockfd, SIOCGIFFLAGS, &ifopts);
+    ifopts.ifr_flags |= IFF_PROMISC;
+    ioctl(stub_sockfd, SIOCSIFFLAGS, &ifopts);
+
+    // Allow the socket to be reused - incase connection is closed prematurely */
+    if (setsockopt(stub_sockfd, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof sockopt) == -1) 
+    {
+	// log perror("setsockopt");
+	close(stub_sockfd);
+	return -1;
+    }
+
+    // Bind to device ????
+    if (setsockopt(stub_sockfd, SOL_SOCKET, SO_BINDTODEVICE, stub_if_name, IFNAMSIZ-1) == -1)	
+    {
+	// log perror("SO_BINDTODEVICE");
+	close(stub_sockfd);
+	return -1;
+    }
 
 
 
@@ -105,9 +170,9 @@ int uadapt_daemon()
     FD_ZERO(&rset); /* clear the set */
     FD_ZERO(&rset_back); /* clear the set */
 
-    FD_SET(stub_sockfd, &rset); /* add stub file descriptor to the set */
-    FD_SET(unix_sockfd, &rset); /* add unix file descriptor to the set */
-    rset_back = rset;
+    FD_SET(stub_sockfd, &rset_back); /* add stub network fd to the set */
+    FD_SET(unix_sockfd, &rset_back); /* add unix listener fd to the set */
+    rset = rset_back;
 
 
     nfds = int_max(nfds, stub_sockfd);
@@ -124,14 +189,28 @@ int uadapt_daemon()
 	{
 	    int conn_unix_fd = 
 		accept(unix_sockfd, (struct sockaddr *)&remote, &remote_len);
-	  
+	    if(conn_unix_fd < 0)
+	    {
+		// log err
+		continue;  // problem could be recoverable
+	    }
 
-
+	    unix_conn_sockfd = conn_unix_fd;
+	    FD_SET(unix_conn_sockfd, &rset_back); /* add unix conn fd to the set */
+	    nfds = int_max(nfds, unix_conn_sockfd);
 	}
 
 	if(FD_ISSET(stub_sockfd, &rset))
 	{
-	    
+	    read_stub_net(stub_sockfd);
+	}
+
+	if(unix_conn_sockfd >= 0)
+	{
+	    if(FD_ISSET(unix_conn_sockfd, &rset))
+	    {
+
+	    }
 	}
 	    
 
