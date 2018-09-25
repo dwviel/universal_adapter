@@ -111,7 +111,7 @@ int read_unix_conn(int unix_conn_sockfd)
 	// Need to have a valid sockaddr to send
 	// Extract the dest eth addr
 	// Ethernet frame
-	struct ethhdr *eth = (struct ether_header *) buf;
+	struct ethhdr *eth = (struct ethhdr *) buf;
 	
 	struct ifreq ifreq_i;
 	memset(&ifreq_i,0,sizeof(ifreq_i));
