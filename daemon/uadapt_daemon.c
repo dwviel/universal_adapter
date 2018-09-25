@@ -29,10 +29,13 @@ int unix_conn_sockfd = -1;
 // stub network interface name
 char stub_if_name[IFNAMSIZ];
 
-// Ethernet frame size
+// Ethernet frame size (Ethernet II, no trailing crc)
 #define ETH_BUF_SIZ	1514
 
-
+// Number of rset fds for pselect
+int nfds = 0;
+// Set of fds to read
+fd_set rset_back;
 
 // Simple checksum function, may use others such as Cyclic Redundancy Check, CRC
 unsigned short csum(unsigned short *buf, int len)
@@ -63,6 +66,20 @@ int read_stub_net(int stub_sockfd)
     int numtotal = 0;
 
     numbytes = recvfrom(stub_sockfd, buf, ETH_BUF_SIZ, 0, NULL, NULL);
+    if(numbytes == -1)
+    {
+	return -1;
+    }
+    if(numbytes == 0)
+    {
+	// other side has shutdown
+	// should this happen on a raw socket????
+	close(stub_sockfd);
+	FD_CLR(stub_sockfd, &rset_back); /* remove stub network fd to the set */
+	// change nfds???? 
+	stub_sockfd = -1;
+	return -1;
+    } 
 
     // Send to adapter application
     if(unix_conn_sockfd >= 0)
@@ -247,9 +264,9 @@ int uadapt_daemon()
     }
 
     // Block on the two fds and handle appropriately when something to read
-    int nfds = 0;
+    //int nfds = 0;
     int ret = 0;
-    fd_set rset, rset_back;
+    fd_set rset;
     FD_ZERO(&rset); /* clear the set */
     FD_ZERO(&rset_back); /* clear the set */
 
