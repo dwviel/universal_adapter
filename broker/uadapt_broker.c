@@ -42,7 +42,7 @@ int int_max(int x, int y)
 int uadapt_broker()
 {
     // Instantiate RAW socket to listen on wire
-    if ((stub_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW)) == -1) 
+    if ((stub_sockfd = socket(AF_INET, SOCK_RAW, htons(ETH_P_ALL))) == -1) //  or IPPROTO_RAW
     {
 	// log this 
 	return -1;;
