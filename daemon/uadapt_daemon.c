@@ -15,7 +15,7 @@
 #include <fcntl.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
-
+#include <linux/if_packet.h>
 
 // stub network (wire to device) socket file descriptor
 int stub_sockfd;
@@ -56,26 +56,94 @@ int int_max(int x, int y)
 
 int read_stub_net(int stub_sockfd)
 {
+    // We will only read Ethernet frames.  Anything larger will be discarded.
+    char buf[ETH_BUF_SIZ]; // single Ethernet frame
+    bzero(buf, ETH_BUF_SIZ);
+    int numbytes = 0;
+    int numtotal = 0;
+
+    numbytes = recvfrom(stub_sockfd, buf, ETH_BUF_SIZ, 0, NULL, NULL);
+
+    // Send to adapter application
+    if(unix_conn_sockfd >= 0)
+    {
+	int numsent = write(unix_conn_sockfd, buf, numbytes);
+	if(numsent == -1)
+	{
+	    return -1;
+	}
+	if(numsent < numbytes)
+	{
+	    // try sending rest of data one time
+	    numtotal += numsent;
+	    numsent = write(unix_conn_sockfd, (buf+numsent), (numbytes-numsent));
+	    numtotal += numsent;
+	}
+	if(numtotal < numbytes)
+	{
+	    return -1;
+	}
+    }
+
+    return 0;
+}
+
+
+int read_unix_conn(int unix_conn_sockfd)
+{
+    // We will only read Ethernet frames.  Anything larger will be discarded.
     char buf[ETH_BUF_SIZ]; // single Ethernet frame
     bzero(buf, ETH_BUF_SIZ);
     int numbytes = 0;
 
-    numbytes = recvfrom(stub_sockfd, buf, ETH_BUF_SIZ, 0, NULL, NULL);
+    if(unix_conn_sockfd >= 0)
+    {
+	numbytes = read(unix_conn_sockfd, buf, ETH_BUF_SIZ);
+	if(numbytes == -1)
+	{
+	    return -1;
+	}
+	if(numbytes == 0)
+	{
+	    return -1;
+	} 
+	
+	// Need to have a valid sockaddr to send
+	// Extract the dest eth addr
+	// Ethernet frame
+	struct ethhdr *eth = (struct ether_header *) buf;
+	
+	struct ifreq ifreq_i;
+	memset(&ifreq_i,0,sizeof(ifreq_i));
+	strncpy(ifreq_i.ifr_name, stub_if_name, IFNAMSIZ-1); //giving name of Interface
+	
+	if((ioctl(stub_sockfd, SIOCGIFINDEX, &ifreq_i)) < 0)
+	{
+	    return -1;
+	}
+	
+	struct sockaddr_ll sadr_ll;
+	sadr_ll.sll_ifindex = ifreq_i.ifr_ifindex; // index of interface
+	sadr_ll.sll_halen = ETH_ALEN; // length of destination mac address
+	sadr_ll.sll_addr[0] = eth->h_dest[0];
+	sadr_ll.sll_addr[1] = eth->h_dest[1];
+	sadr_ll.sll_addr[2] = eth->h_dest[2];
+	sadr_ll.sll_addr[3] = eth->h_dest[3];
+	sadr_ll.sll_addr[4] = eth->h_dest[4];
+	sadr_ll.sll_addr[5] = eth->h_dest[5];
 
-
-    // Ethernet frame
-    //struct ether_header *eh = (struct ether_header *) buf;
-
-
-    // IP packet
-    //int ip_length = 0; // packet length
-    //struct iphdr *iph = (struct iphdr *) (buf + sizeof(struct ether_header));
-
-    //ip_length = ntohs(iph->ip_len);
-    
-
-    // ICMP payload
-    //struct icmphdr *icmp = (struct icmphdr *)(iph + 1);
+	int sentbytes = sendto(stub_sockfd, buf, numbytes,
+			       0, (struct sockaddr*)&sadr_ll, 
+			       sizeof(struct sockaddr_ll));
+	if(sentbytes == -1)
+	{
+	    return -1;
+	}
+	if(sentbytes == 0)
+	{
+	    return -1;
+	}
+    }
     
 
     return 0;
@@ -108,6 +176,21 @@ int uadapt_daemon()
     {
 	// log perror("setsockopt");
 	close(stub_sockfd);
+	return -1;
+    }
+
+    int flags = 0;
+    // Set the stub net socket non-blocking
+    flags = fcntl(stub_sockfd, F_GETFL, 0);
+    if (flags == -1) 
+    {
+	// log error
+	return -1;
+    }
+    flags = flags | O_NONBLOCK;
+    if(fcntl(stub_sockfd, F_SETFL, flags) == -1)
+    {
+	// log error
 	return -1;
     }
 
@@ -150,7 +233,7 @@ int uadapt_daemon()
     }
 
     // Set the listening unix socket non-blocking
-    int flags = fcntl(unix_sockfd, F_GETFL, 0);
+    flags = fcntl(unix_sockfd, F_GETFL, 0);
     if (flags == -1) 
     {
 	// log error
@@ -209,7 +292,7 @@ int uadapt_daemon()
 	{
 	    if(FD_ISSET(unix_conn_sockfd, &rset))
 	    {
-
+		read_unix_conn(unix_conn_sockfd);
 	    }
 	}
 	    
