@@ -1,8 +1,8 @@
-#ifndef UADAPT_BROKER
-#define UADAPT_BROKER
+#ifndef UADAPT_DAEMON
+#define UADAPT_DAEMON
 
 
-// Core universal adapter broker function
-int uadapt_broker();
+// Core universal adapter daemon function
+int uadapt_daemon();
 
 #endif

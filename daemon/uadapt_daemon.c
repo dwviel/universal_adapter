@@ -1,13 +1,14 @@
 /**
- *  Universal adapter broker functionality
+ *  Universal adapter daemon functionality
  */
 
 
-#include "uadapt_broker.h"
+#include "uadapt_daemon.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
-#include<netinet/ip.h>
+#include <netinet/ip.h>
+#include <netinet/ether.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -39,7 +40,7 @@ int int_max(int x, int y)
 }
 
 
-int uadapt_broker()
+int uadapt_daemon()
 {
     // Instantiate RAW socket to listen on wire
     if ((stub_sockfd = socket(AF_INET, SOCK_RAW, htons(ETH_P_ALL))) == -1) //  or IPPROTO_RAW
