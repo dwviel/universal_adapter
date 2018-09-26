@@ -97,8 +97,34 @@ int read_unix_controlmq_two(uint32_t nonce, uint8_t buf[])
 {
     // Receive two parts of messages in two calls
 
-}
+    // Search for nonce.  Use rbtree
+    uint8_t *part = NULL;  // Fixme!!!! to search rbtree
+    char ethbuf[ETH_BUF_SIZ];
+    memset(ethbuf, 0, ETH_BUF_SIZ);
 
+    if( sizeof(part) == MAX_CONTROLMQ_DATA_SIZE_TWO )
+    {
+	// part is first part
+	memcpy(ethbuf, part, MAX_CONTROLMQ_DATA_SIZE_TWO);
+	memcpy((ethbuf+MAX_CONTROLMQ_DATA_SIZE_TWO),
+	       buf, (ETH_BUF_SIZ-MAX_CONTROLMQ_DATA_SIZE_TWO));
+    }
+    else
+    {
+	// part is second part
+	memcpy(ethbuf, buf, MAX_CONTROLMQ_DATA_SIZE_TWO);
+	memcpy((ethbuf+MAX_CONTROLMQ_DATA_SIZE_TWO),
+	       part, (ETH_BUF_SIZ-MAX_CONTROLMQ_DATA_SIZE_TWO));
+    }
+
+
+    if(write(unix_uadapter_daemon_sockfd, ethbuf, ETH_BUF_SIZ) == -1)
+    {
+	return -1;
+    }
+    
+    return 0;
+}
 
 int read_unix_controlmq(int unix_controlmq_sockfd)
 {
@@ -120,6 +146,7 @@ int read_unix_controlmq(int unix_controlmq_sockfd)
     char ethbuf[ETH_BUF_SIZ];
     memset(ethbuf, 0, ETH_BUF_SIZ);
     // copy message data to ethbuf
+
     if(write(unix_uadapter_daemon_sockfd, ethbuf, ETH_BUF_SIZ) == -1)
     {
 	return -1;
