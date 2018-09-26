@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <sys/time.h>
 
 
 #include "../common/uadapt_common.h"
@@ -43,6 +44,7 @@ int unix_controlmq_sockfd = -1;
 #define MAX_CONTROLMQ_DATA_SIZE_TWO 1066 
 
 uint32_t controlmq_nonce = 1;
+const int allowed_difftime_us = 250000;  // 250ms max between packet parts
 
 
 int read_unix_uadapter(int unix_uadapter_daemon_sockfd)
@@ -93,12 +95,43 @@ int read_unix_uadapter(int unix_uadapter_daemon_sockfd)
     return 0;
 }
 
+int prune_rbtrees(struct timeval *curtime)
+{
+    /*struct timeval difftime;
+    timersub(&curtime, &part->parttime, &difftime); 
+    if( (difftime.tv_sec > 0) || (difftime.tv_usec > allowed_difftime_us) )
+    {
+	// too old
+	// remove from rbtree !!!!
+	return 0;
+    }
+    */
+
+    return 0;
+}
+
 int read_unix_controlmq_two(uint32_t nonce, uint8_t buf[])
 {
     // Receive two parts of messages in two calls
+    struct timeval curtime;
+    int timeret = gettimeofday(&curtime, NULL);
+    if(timeret == -1)
+    {
+	return -1;
+    }
+
+    // prune rbtree: now or do periodically????
+    // Two trees? one key on nonce, other on timeval?
+    prune_rbtrees(&curtime);
 
     // Search for nonce.  Use rbtree
     uint8_t *part = NULL;  // Fixme!!!! to search rbtree
+    if(part == NULL)
+    {
+	// New, add to rbtree
+	return 0;
+    }
+
     char ethbuf[ETH_BUF_SIZ];
     memset(ethbuf, 0, ETH_BUF_SIZ);
 
